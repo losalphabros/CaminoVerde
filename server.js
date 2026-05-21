@@ -315,4 +315,5 @@ app.post("/webhook", async (req, res) => {
 // ── Health check ──────────────────────────────────────────────────
 app.get("/", (req, res) => res.send("Bot Camino Verde activo ✅"));
 
-app.listen(PORT, () => console.log(`🚀 Bot corriendo en puerto ${PORT}`));
+const port = process.env.PORT || 3000;
+app.listen(port, "0.0.0.0", () => console.log(`🚀 Bot corriendo en puerto ${port}`));
