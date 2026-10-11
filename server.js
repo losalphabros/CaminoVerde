@@ -19,8 +19,11 @@ const SPREADSHEET_ID  = process.env.SPREADSHEET_ID  || "";
 const GOOGLE_CREDS    = process.env.GOOGLE_CREDS    || "{}";
 const PORT            = process.env.PORT            || 3000;
 
-// Numero personal del Lic. Sergio
-const LIC_NUMERO = "526645365944";
+// Numero personal del Lic. Sergio (se configura en Railway, no en el codigo)
+const LIC_NUMERO = process.env.LAWYER_PHONE || "";
+// Plantilla aprobada en WhatsApp Manager para avisar al licenciado
+const PLANTILLA_AVISO = process.env.TEMPLATE_AVISO || "nuevo_prospecto";
+const IDIOMA_PLANTILLA = process.env.TEMPLATE_IDIOMA || "es_MX";
 
 // Catalogo de casos
 const CASOS = {
@@ -145,6 +148,49 @@ async function enviar(para, texto) {
   }
 }
 
+// Limpiar texto para variables de plantilla (Meta no acepta saltos de linea ni tabs)
+function limpiarParam(t) {
+  const v = String(t || "").replace(/[\n\r\t]+/g, " ").replace(/ {2,}/g, " ").trim();
+  return (v || "-").substring(0, 900);
+}
+
+// Avisar al Lic. Sergio con plantilla aprobada (llega aunque no haya escrito en 24 h)
+async function avisarLicenciado(s) {
+  if (!LIC_NUMERO) {
+    console.error("Falta la variable LAWYER_PHONE: no se aviso al licenciado");
+    return;
+  }
+  if (!WHATSAPP_TOKEN || !PHONE_NUMBER_ID) {
+    console.log("[TEST] Aviso al licenciado: " + s.nombre);
+    return;
+  }
+  try {
+    await axios.post(
+      "https://graph.facebook.com/v19.0/" + PHONE_NUMBER_ID + "/messages",
+      {
+        messaging_product: "whatsapp",
+        to: LIC_NUMERO,
+        type: "template",
+        template: {
+          name: PLANTILLA_AVISO,
+          language: { code: IDIOMA_PLANTILLA },
+          components: [{
+            type: "body",
+            parameters: [s.nombre, s.telefono, s.colonia, s.caso, s.descripcion, s.ventana]
+              .map(v => ({ type: "text", text: limpiarParam(v) })),
+          }],
+        },
+      },
+      { headers: { Authorization: "Bearer " + WHATSAPP_TOKEN, "Content-Type": "application/json" } }
+    );
+    console.log("Aviso (plantilla) enviado al licenciado: " + s.nombre);
+  } catch (err) {
+    console.error("Error en plantilla de aviso: " + JSON.stringify(err.response && err.response.data));
+    // Respaldo: mensaje normal (solo llega si el licenciado escribio en las ultimas 24 h)
+    await avisarLicenciado(s);
+  }
+}
+
 // Logica principal del bot
 async function procesarMensaje(telefono, texto) {
   const msg = texto.trim();
@@ -229,7 +275,7 @@ async function procesarMensaje(telefono, texto) {
 
     await guardarEnSheets(s);
     await enviar(telefono, mensajeConfirmacion(s));
-    await enviar(LIC_NUMERO, mensajeParaLic(s));
+    await avisarLicenciado(s);
   }
 }
 
