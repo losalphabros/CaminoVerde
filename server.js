@@ -74,6 +74,19 @@ const MENSAJE_REPETIR = `Visite nuestras redes como *@Legal.CaminoVerde* o www.L
 // Sesiones en memoria
 const sesiones = {};
 
+// Mensajes ya procesados (Meta puede entregar el mismo mensaje mas de una vez)
+const procesados = new Map();
+function yaProcesado(id) {
+  if (!id) return false;
+  if (procesados.has(id)) return true;
+  procesados.set(id, Date.now());
+  if (procesados.size > 2000) {
+    const limite = Date.now() - 24 * 60 * 60 * 1000;
+    for (const [k, t] of procesados) if (t < limite || procesados.size > 1500) procesados.delete(k);
+  }
+  return false;
+}
+
 // Detectar caso por palabras clave
 function detectarCaso(texto) {
   const t = texto.toLowerCase();
@@ -301,6 +314,10 @@ app.post("/webhook", async (req, res) => {
                      req.body.entry[0].changes[0].value.messages;
     if (!messages || messages.length === 0) return;
     const msg      = messages[0];
+    if (yaProcesado(msg.id)) {
+      console.log("Mensaje duplicado ignorado: " + msg.id);
+      return;
+    }
     const telefono = msg.from;
     const texto    = msg.type === "text" ? msg.text.body : null;
     if (!texto) return;
